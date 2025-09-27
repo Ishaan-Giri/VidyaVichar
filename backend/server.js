@@ -5,7 +5,7 @@ const path = require('path');
 require('dotenv').config();
 
 // to be implemented
-// const authRoutes = require('./routes/auth');
+const authRoutes = require('./routes/auth');
 // const classRoutes = require('./routes/classes');
 // const questionRoutes = require('./routes/questions');
 
@@ -24,7 +24,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/vidyavich
     .catch(err => console.log('MongoDB connection error:', err));
 
 // to be implemented
-// app.use('/api/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 // app.use('/api/classes', classRoutes);
 // app.use('/api/questions', questionRoutes);
 
