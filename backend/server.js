@@ -6,7 +6,7 @@ require('dotenv').config();
 
 // to be implemented
 const authRoutes = require('./routes/auth');
-// const classRoutes = require('./routes/classes');
+const classRoutes = require('./routes/classes');
 // const questionRoutes = require('./routes/questions');
 
 const app = express();
@@ -25,7 +25,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/vidyavich
 
 // to be implemented
 app.use('/api/auth', authRoutes);
-// app.use('/api/classes', classRoutes);
+app.use('/api/classes', classRoutes);
 // app.use('/api/questions', questionRoutes);
 
 const server = app.listen(PORT, () => {
