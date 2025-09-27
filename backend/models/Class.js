@@ -6,15 +6,15 @@ const classSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
-  instructorId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
   instructorName: {
     type: String,
     required: true,
     trim: true
+  },
+  instructorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
   accessCode: {
     type: String,
@@ -22,7 +22,7 @@ const classSchema = new mongoose.Schema({
     unique: true,
     length: 6
   },
-  durationInMinutes: {
+  duration: {
     type: Number,
     required: true
   },

@@ -1,106 +1,85 @@
-const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-const generateToken = (id, role) => {
-  return jwt.sign(
-    { id, role },
-    process.env.JWT_SECRET || 'vidyavichara_secret',
-    { expiresIn: '7d' }
-  );
-};
-
-
+// Instructor Signup
 const registerUser = async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    const userExists = await User.findOne({ username });
-
-    if (userExists) {
-      return res.status(400).json({
-        success: false,
-        message: 'User already exists'
-      });
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Username already exists' });
     }
 
-    const user = await User.create({
-      username,
-      password
+    const user = new User({ username, password });
+    await user.save();
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET || 'vidyavichara_secret',
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        role: user.role
+      }
     });
-
-    if (user) {
-      res.status(201).json({
-        success: true,
-        data: {
-          _id: user._id,
-          username: user.username,
-          role: user.role,
-          token: generateToken(user._id)
-        }
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        message: 'Invalid user data'
-      });
-    }
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    res.status(500).json({ message: 'Error creating user', error: error.message });
   }
 };
 
-
+// Instructor Login
 const loginUser = async (req, res) => {
   try {
     const { username, password } = req.body;
 
     const user = await User.findOne({ username });
-
-    if (user && (await user.comparePassword(password))) {
-      res.json({
-        success: true,
-        data: {
-          _id: user._id,
-          username: user.username,
-          role: user.role,
-          token: generateToken(user._id)
-        }
-      });
-    } else {
-      res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET || 'vidyavichara_secret',
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        role: user.role
+      }
     });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-const getMe = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-
-    res.status(200).json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
+// Get current user (protected route)
+const getMe = (req, res) => {
+  res.json({
+    user: {
+      id: req.user._id,
+      username: req.user.username,
+      role: req.user.role
+    }
+  });
 };
 
 module.exports = {
   registerUser,
   loginUser,
   getMe
-};
+};   
