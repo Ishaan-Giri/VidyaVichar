@@ -24,43 +24,52 @@ const ClassView = () => {
     } catch (error) {
       console.error('Failed to fetch class details:', error);
       setError('Failed to fetch class details. It may not exist.');
-      setLoading(false);
-    }
-  }, [classId]);
-
-  const fetchQuestions = useCallback(async () => {
-    if (!classId) return;
-    
-    try {
-      const response = await api.get(`/questions/for-class/${classId}?status=${filter}`);
-      const questionsData = Array.isArray(response.data) ? response.data.filter(q => q && q._id) : [];
-      setQuestions(questionsData);
-    } catch (error) {
-      console.error('Failed to fetch questions:', error);
-      setQuestions([]);
-      setError('Failed to fetch questions.');
     } finally {
       setLoading(false);
     }
-  }, [classId, filter]);
+  }, [classId]);
 
   useEffect(() => {
     if (!user) {
       navigate('/');
       return;
     }
+    setLoading(true);
     fetchClassDetails();
   }, [user, navigate, fetchClassDetails]);
 
   useEffect(() => {
-    if (classData) {
-      fetchQuestions();
-      if (isClassActive) {
-        const interval = setInterval(fetchQuestions, 3000);
-        return () => clearInterval(interval);
+    if (!classData) return;
+
+    let isMounted = true;
+
+    const safeSetState = (fn) => { if (isMounted) fn(); };
+
+    const fetchQuestions = async () => {
+      if (!classId) return;
+      try {
+        const response = await api.get(`/questions/for-class/${classId}?status=${filter}`);
+        const questionsData = Array.isArray(response.data)
+          ? response.data.filter(q => q && q._id)
+          : [];
+        safeSetState(() => setQuestions(questionsData));
+      } catch (err) {
+        console.error('Failed to fetch questions:', err);
+        safeSetState(() => {
+          setQuestions([]);
+        });
       }
-    }
-  }, [classData, filter, fetchQuestions, isClassActive]);
+    };
+
+    fetchQuestions();
+
+    const interval = isClassActive ? setInterval(fetchQuestions, 3000) : null;
+
+    return () => {
+      isMounted = false;
+      if (interval) clearInterval(interval);
+    };
+  }, [classData, classId, filter, isClassActive]);
 
   const handleEndClass = async () => {
     if (window.confirm('Are you sure you want to end this class? This cannot be undone.')) {
@@ -76,24 +85,34 @@ const ClassView = () => {
   };
 
   const handleQuestionStatusChange = async (questionId, newStatus) => {
-    if (!questionId || !newStatus) return;
-    
+    setQuestions(prev =>
+      prev.map(q =>
+        q._id === questionId
+          ? { ...q, status: newStatus, updatedAt: new Date().toISOString() }
+          : q
+      )
+    );
+
     try {
       await api.patch(`/questions/${questionId}/status`, { status: newStatus });
-      fetchQuestions();
     } catch (error) {
-      console.error('Failed to update question status:', error);
+      setQuestions(prev =>
+        prev.map(q =>
+          q._id === questionId
+            ? { ...q, status: 'unanswered' }
+            : q
+        )
+      );
       setError('Failed to update question status');
     }
   };
 
   const handleClearBoard = async () => {
     if (!classId) return;
-    
+
     if (window.confirm('Are you sure you want to clear all questions from the board? This will archive them.')) {
       try {
         await api.delete(`/questions/class/${classId}/clear`);
-        fetchQuestions();
       } catch (error) {
         console.error('Failed to clear questions:', error);
         setError('Failed to clear questions');
@@ -105,7 +124,7 @@ const ClassView = () => {
     return <div className="loading">Loading class...</div>;
   }
 
-  return (
+    return (
     <div className="dashboard">
       <div className="dashboard-header">
         <button onClick={() => navigate('/instructor-dashboard')} className="btn">
@@ -122,7 +141,7 @@ const ClassView = () => {
               <h3>Questions for {classData.subjectName}</h3>
               <p>Access Code: <span className="access-code">{classData.accessCode}</span></p>
             </div>
-            <div style={{display: 'flex', gap: '1rem', alignItems: 'center'}}>
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
               <QuestionFilter filter={filter} onFilterChange={setFilter} />
               {isClassActive && (
                 <button onClick={handleEndClass} className="btn btn-warning">
@@ -158,4 +177,4 @@ const ClassView = () => {
   );
 };
 
-export default ClassView;
+export default ClassView;   
