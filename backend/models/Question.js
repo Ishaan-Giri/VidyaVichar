@@ -5,7 +5,8 @@ const questionSchema = new mongoose.Schema({
   text: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    unique: true
   },
   author: {
     type: String,
