@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { api } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
+
 
 const CreateClass = ({ onClassCreated }) => {
   const [formData, setFormData] = useState({
     subjectName: '',
-    instructorName: '',
     duration: 60
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
 
+  const { user } = useAuth();
   const handleInputChange = (e) => {
     setFormData({
       ...formData,
@@ -23,7 +25,7 @@ const CreateClass = ({ onClassCreated }) => {
     e.preventDefault();
     setLoading(true);
 
-    if (!formData.subjectName || !formData.instructorName) {
+    if (!formData.subjectName || !user?.username) {
       setError('Please fill in all fields');
       setLoading(false);
       return;
@@ -35,8 +37,14 @@ const CreateClass = ({ onClassCreated }) => {
       return;
     }
 
+    
     try {
-      const response = await api.post('/classes/create', formData);
+      const payload = {
+        subjectName: formData.subjectName,
+        duration: formData.duration,
+        instructorName: user?.username
+      };
+      const response = await api.post('/classes/create', payload);
       onClassCreated(response.data);
       setFormData({ subjectName: '', instructorName: '', duration: 60 });
       setShowForm(false);
@@ -74,19 +82,6 @@ const CreateClass = ({ onClassCreated }) => {
                   value={formData.subjectName}
                   onChange={handleInputChange}
                   placeholder="e.g., Software Engineering"
-                  required
-                />
-              </div>
-              
-              <div className="form-group">
-                <label htmlFor="instructorName">Instructor Name</label>
-                <input
-                  type="text"
-                  id="instructorName"
-                  name="instructorName"
-                  value={formData.instructorName}
-                  onChange={handleInputChange}
-                  placeholder="Your full name"
                   required
                 />
               </div>
