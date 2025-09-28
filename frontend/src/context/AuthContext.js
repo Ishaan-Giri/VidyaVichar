@@ -1,55 +1,44 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { api } from '../utils/api';
 
-const AuthContext = createContext();
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchUser = useCallback(async () => {
     const token = localStorage.getItem('token');
     if (token) {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      fetchUser();
-    } else {
-      setLoading(false);
+      try {
+        const response = await api.get('/auth/me');
+        setUser(response.data.user);
+      } catch (error) {
+        console.error('Failed to fetch user', error);
+        localStorage.removeItem('token');
+        delete api.defaults.headers.common['Authorization'];
+        setUser(null);
+      }
     }
+    setLoading(false);
   }, []);
 
-  const fetchUser = async () => {
-    try {
-      const response = await api.get('/auth/me');
-      setUser(response.data.user);
-    } catch (error) {
-      localStorage.removeItem('token');
-      delete api.defaults.headers.common['Authorization'];
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
 
-  const login = async (credentials, isInstructor = true) => {
+  const login = async (credentials, isInstructor) => {
     try {
-      let response;
       if (isInstructor) {
-        response = await api.post('/auth/login', credentials);
+        const response = await api.post('/auth/login', credentials);
         const { token, user } = response.data;
         localStorage.setItem('token', token);
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         setUser(user);
-        return { success: true, user };
+        return { success: true };
       } else {
-        // Student login with access code
-        response = await api.post('/classes/join', { accessCode: credentials.accessCode });
+        const response = await api.post('/classes/join', credentials);
         return { success: true, classData: response.data };
       }
     } catch (error) {
@@ -64,7 +53,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', token);
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(user);
-      return { success: true, user };
+      return { success: true };
     } catch (error) {
       return { success: false, message: error.response?.data?.message || 'Signup failed' };
     }
@@ -78,11 +67,19 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
+    loading,
     login,
     signup,
-    logout,
-    loading
+    logout
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  return useContext(AuthContext);
 };

@@ -103,7 +103,7 @@ const Login = () => {
             fontWeight: '600'
           }}
         >
-          Student Access
+          Student/TA Access
         </button>
       </div>
 
