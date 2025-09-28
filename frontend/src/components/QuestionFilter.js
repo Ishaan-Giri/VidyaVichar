@@ -5,7 +5,8 @@ const QuestionFilter = ({ filter, onFilterChange }) => {
     { key: 'all', label: 'All Questions' },
     { key: 'unanswered', label: 'Unanswered' },
     { key: 'answered', label: 'Answered' },
-    { key: 'important', label: 'Important' }
+    { key: 'important', label: 'Important' },
+    { key: 'archived', label: 'Archived' }
   ];
 
   return (

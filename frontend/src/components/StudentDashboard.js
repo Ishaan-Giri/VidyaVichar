@@ -13,9 +13,10 @@ const StudentDashboard = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [timeLeft, setTimeLeft] = useState('');
+  const [isPast, setIsPast] = useState(false);
 
   const updateTimer = useCallback(() => {
-    if (!classData) return;
+    if (!classData || isPast) return;
     
     const now = new Date();
     const endTime = new Date(classData.endTime);
@@ -23,20 +24,30 @@ const StudentDashboard = () => {
     
     if (timeDiff <= 0) {
       setTimeLeft('Class has ended');
+      setIsPast(true); // Mark class as ended
       return;
     }
     
     const minutes = Math.floor(timeDiff / (1000 * 60));
     const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
     setTimeLeft(`${minutes}m ${seconds}s remaining`);
-  }, [classData]);
+  }, [classData, isPast]);
 
   const fetchQuestions = useCallback(async () => {
     if (!classData) return;
     
     try {
       const response = await api.get(`/questions/class/${classData.classId}`);
-      setQuestions(response.data);
+      const data = response.data;
+      setQuestions(data?.questions || []);
+      
+      if (data?.isPast) {
+        setIsPast(true);
+      }
+      
+      if (data?.analytics) {
+        setClassData(prev => ({ ...prev, analytics: data.analytics }));
+      }
     } catch (error) {
       console.error('Failed to fetch questions');
     }
@@ -49,6 +60,7 @@ const StudentDashboard = () => {
       return;
     }
     setClassData(data);
+    setIsPast(data.isPast || new Date() > new Date(data.endTime));
   }, [location, navigate]);
 
   useEffect(() => {
@@ -58,15 +70,16 @@ const StudentDashboard = () => {
       // Set up polling for questions
       const questionsInterval = setInterval(fetchQuestions, 3000);
       
-      // Set up timer
-      const timerInterval = setInterval(updateTimer, 1000);
-      
-      return () => {
-        clearInterval(questionsInterval);
-        clearInterval(timerInterval);
-      };
+      // Set up timer only if class is not in the past
+      if (!isPast) {
+        const timerInterval = setInterval(updateTimer, 1000);
+        return () => {
+          clearInterval(questionsInterval);
+          clearInterval(timerInterval);
+        };
+      }
     }
-  }, [classData, fetchQuestions, updateTimer]);
+  }, [classData, fetchQuestions, updateTimer, isPast]);
 
   const handleSubmitQuestion = async (e) => {
     e.preventDefault();
@@ -89,6 +102,7 @@ const StudentDashboard = () => {
       });
       
       setNewQuestion('');
+      setStudentName(''); // Clear the name field
       setSuccess('Question posted successfully!');
       setTimeout(() => setSuccess(''), 3000);
       fetchQuestions();
@@ -105,16 +119,14 @@ const StudentDashboard = () => {
     return <div className="loading">Loading...</div>;
   }
 
-  const isClassEnded = new Date() > new Date(classData.endTime);
-
   return (
     <div className="dashboard">
       <div className="dashboard-header">
         <div>
           <h2 className="dashboard-title">{classData.subjectName}</h2>
           <p>Instructor: {classData.instructorName}</p>
-          <p className={isClassEnded ? 'error-message' : 'success-message'}>
-            {timeLeft}
+          <p className={isPast ? 'error-message' : 'success-message'}>
+            {isPast ? 'Class has ended' : timeLeft}
           </p>
         </div>
         <button onClick={handleLeaveClass} className="logout-btn">
@@ -125,7 +137,36 @@ const StudentDashboard = () => {
       {error && <div className="error-message">{error}</div>}
       {success && <div className="success-message">{success}</div>}
 
-      {!isClassEnded ? (
+      {isPast ? (
+        <div className="class-analytics">
+          <h3>Class Analytics</h3>
+          {classData.analytics ? (
+            <div className="analytics-grid">
+              <div className="analytic-item">
+                <span>{classData.analytics.totalQuestions}</span>
+                <p>Total Questions</p>
+              </div>
+              <div className="analytic-item">
+                <span>{classData.analytics.answered}</span>
+                <p>Answered</p>
+              </div>
+              <div className="analytic-item">
+                <span>{classData.analytics.unanswered}</span>
+                <p>Unanswered</p>
+              </div>
+              <div className="analytic-item">
+                <span>{classData.analytics.important}</span>
+                <p>Marked Important</p>
+              </div>
+            </div>
+          ) : (
+            <p>Analytics for this class are not available.</p>
+          )}
+          <div className="error-message" style={{marginTop: '1rem'}}>
+            This class session has ended. You can no longer post questions.
+          </div>
+        </div>
+      ) : (
         <div className="question-form">
           <h3>Ask a Question</h3>
           <form onSubmit={handleSubmitQuestion}>
@@ -165,10 +206,6 @@ const StudentDashboard = () => {
               </button>
             </div>
           </form>
-        </div>
-      ) : (
-        <div className="error-message">
-          This class session has ended. You can no longer post questions.
         </div>
       )}
 
