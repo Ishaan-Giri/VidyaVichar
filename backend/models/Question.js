@@ -5,8 +5,7 @@ const questionSchema = new mongoose.Schema({
   text: {
     type: String,
     required: true,
-    trim: true,
-    unique: true
+    trim: true
   },
   author: {
     type: String,
@@ -19,7 +18,7 @@ const questionSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['unanswered', 'answered', 'important'],
+    enum: ['unanswered', 'answered', 'important', 'archived'],
     default: 'unanswered'
   },
   color: {
