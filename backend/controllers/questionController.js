@@ -19,6 +19,12 @@ const createQuestion = async (req, res) => {
       return res.status(400).json({ message: 'Class session has ended' });
     }
 
+    // Check for duplicate question in the same class
+    const existingQuestion = await Question.findOne({ text: text.trim(), classId });
+    if (existingQuestion) {
+      return res.status(400).json({ message: 'This question has already been asked in this class' });
+    }
+
     // Generate random color for sticky note
     const colors = ['#FFE135', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8'];
     const color = colors[Math.floor(Math.random() * colors.length)];
@@ -35,9 +41,6 @@ const createQuestion = async (req, res) => {
     
     res.status(201).json(question);
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ message: 'This question has already been asked in this class' });
-    }
     res.status(500).json({ message: 'Error posting question', error: error.message });
   }
 };
@@ -47,28 +50,65 @@ const createQuestion = async (req, res) => {
 // @access  Public
 const getQuestions =  async (req, res) => {
   try {
-    const { status } = req.query;
-    let filter = { classId: req.params.classId };
-    
-    if (status && status !== 'all') {
-      filter.status = status;
+    const classRoom = await Class.findById(req.params.classId);
+    if (!classRoom) {
+      return res.status(404).json({ message: 'Class not found' });
     }
 
-    const questions = await Question.find(filter)
+    const questions = await Question.find({ classId: req.params.classId })
       .populate('classId', 'subjectName instructorName')
       .sort({ createdAt: -1 });
-    
-    // Add logging to debug
-    console.log('Fetched questions:', questions.length);
-    console.log('Sample question:', questions[0]);
-    
-    // Ensure all questions have required fields
-    const validQuestions = questions.filter(q => q && q._id && q.text);
-    
-    res.json(validQuestions);
+
+    const isPast = new Date() > new Date(classRoom.endTime);
+
+    let analytics = null;
+    if (isPast) {
+      const totalQuestions = questions.length;
+      const answered = questions.filter(q => q.status === 'answered').length;
+      const important = questions.filter(q => q.status === 'important').length;
+      const unanswered = totalQuestions - answered;
+
+      analytics = { totalQuestions, answered, unanswered, important };
+    }
+
+    res.json({ questions, isPast, analytics });
   } catch (error) {
-    console.error('Error fetching questions:', error);
+    console.error('Error fetching questions for student view:', error);
     res.status(500).json({ message: 'Error fetching questions', error: error.message });
+  }
+};
+
+// @desc    Get questions for a class for instructor review
+// @route   GET /api/questions/for-class/:classId
+// @access  Private (Instructor)
+const getQuestionsForClass = async (req, res) => {
+  try {
+    // First, verify the class belongs to the instructor making the request
+    const classRoom = await Class.findOne({ _id: req.params.classId, instructorId: req.user._id });
+    if (!classRoom) {
+      return res.status(404).json({ message: 'Class not found or you do not have permission to view it.' });
+    }
+
+    const { status } = req.query;
+    let filter = { classId: req.params.classId };
+
+    if (status && status === 'archived') {
+      filter.status = 'archived';
+    } else if (status && status !== 'all') {
+      filter.status = status;
+    } else if (status !== 'archived') {
+      // Default view for instructor excludes archived unless explicitly requested
+      filter.status = { $ne: 'archived' };
+    }
+    
+    // If class is found and verified, fetch the questions
+    const questions = await Question.find(filter)
+      .sort({ createdAt: 'desc' });
+
+    res.json(questions);
+  } catch (error) {
+    console.error('Error fetching questions for instructor:', error);
+    res.status(500).json({ message: 'Error fetching questions for class', error: error.message });
   }
 };
 
@@ -161,8 +201,12 @@ const deleteQuestion = async (req, res) => {
 // @access  Private
 const clearQuestions = async (req, res) => {
   try {
-    await Question.deleteMany({ classId: req.params.classId });
-    res.json({ message: 'All questions cleared successfully' });
+    // Instead of deleting, we update the status to 'archived'
+    await Question.updateMany(
+      { classId: req.params.classId, status: { $ne: 'archived' } },
+      { $set: { status: 'archived' } }
+    );
+    res.json({ message: 'All questions have been archived.' });
   } catch (error) {
     res.status(500).json({ message: 'Error clearing questions', error: error.message });
   }
@@ -173,5 +217,6 @@ module.exports = {
   updateQuestionStatus,
   updateQuestion,
   deleteQuestion,
-  clearQuestions
+  clearQuestions,
+  getQuestionsForClass
 };
