@@ -43,7 +43,7 @@ const classSchema = new mongoose.Schema({
 
 classSchema.pre('save', function(next) {
   if (this.isNew) {
-    this.endTime = new Date(this.startTime.getTime() + this.durationInMinutes * 60000);
+    this.endTime = new Date(this.startTime.getTime() + this.duration * 60000);
   }
   next();
 });
