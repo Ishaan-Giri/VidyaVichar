@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
@@ -8,31 +8,40 @@ const InstructorDashboard = () => {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-
-  const fetchClasses = useCallback(async () => {
-    try {
-      const response = await api.get('/classes/my-classes');
-      const classesData = Array.isArray(response.data) ? response.data : [];
-      setClasses(classesData);
-    } catch (error) {
-      console.error('Failed to fetch classes:', error);
-      setError('Failed to fetch classes');
-      setClasses([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     if (!user) {
       navigate('/');
       return;
     }
+
+    let isMounted = true;
+
+    const fetchClasses = async () => {
+      try {
+        const response = await api.get('/classes/my-classes');
+        const classesData = Array.isArray(response.data) ? response.data : [];
+        if (isMounted) setClasses(classesData);
+      } catch (error) {
+        if (isMounted) {
+          console.error('Failed to fetch classes:', error);
+          setError('Failed to fetch classes');
+          setClasses([]);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
     fetchClasses();
-  }, [user, navigate, fetchClasses]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, navigate]);
 
   const handleClassCreated = (newClass) => {
     if (newClass && newClass._id) {
@@ -80,7 +89,7 @@ const InstructorDashboard = () => {
           <div className="classes-grid">
             {classes.map((classData) => {
               if (!classData || !classData._id) return null;
-              
+
               return (
                 <div key={classData._id} className="class-card">
                   <h3>{classData.subjectName || 'Unnamed Subject'}</h3>
@@ -88,10 +97,10 @@ const InstructorDashboard = () => {
                   <p><strong>Access Code:</strong> <span className="access-code">{classData.accessCode || 'N/A'}</span></p>
                   <p><strong>Duration:</strong> {classData.duration || 0} minutes</p>
                   <p><strong>Status:</strong> {new Date() > new Date(classData.endTime) ? 'Ended' : 'Active'}</p>
-                  <button 
+                  <button
                     onClick={() => handleViewClass(classData._id)}
                     className="btn btn-primary"
-                    style={{marginTop: '1rem'}}
+                    style={{ marginTop: '1rem' }}
                   >
                     View Questions
                   </button>
@@ -105,4 +114,4 @@ const InstructorDashboard = () => {
   );
 };
 
-export default InstructorDashboard;
+export default InstructorDashboard;   

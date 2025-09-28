@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
 import StickyNote from './StickyNote';
@@ -15,44 +15,6 @@ const StudentDashboard = () => {
   const [timeLeft, setTimeLeft] = useState('');
   const [isPast, setIsPast] = useState(false);
 
-  const updateTimer = useCallback(() => {
-    if (!classData || isPast) return;
-    
-    const now = new Date();
-    const endTime = new Date(classData.endTime);
-    const timeDiff = endTime - now;
-    
-    if (timeDiff <= 0) {
-      setTimeLeft('Class has ended');
-      setIsPast(true); // Mark class as ended
-      return;
-    }
-    
-    const minutes = Math.floor(timeDiff / (1000 * 60));
-    const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
-    setTimeLeft(`${minutes}m ${seconds}s remaining`);
-  }, [classData, isPast]);
-
-  const fetchQuestions = useCallback(async () => {
-    if (!classData) return;
-    
-    try {
-      const response = await api.get(`/questions/class/${classData.classId}`);
-      const data = response.data;
-      setQuestions(data?.questions || []);
-      
-      if (data?.isPast) {
-        setIsPast(true);
-      }
-      
-      if (data?.analytics) {
-        setClassData(prev => ({ ...prev, analytics: data.analytics }));
-      }
-    } catch (error) {
-      console.error('Failed to fetch questions');
-    }
-  }, [classData]);
-
   useEffect(() => {
     const data = location.state?.classData;
     if (!data) {
@@ -64,50 +26,95 @@ const StudentDashboard = () => {
   }, [location, navigate]);
 
   useEffect(() => {
-    if (classData) {
-      fetchQuestions();
-      
-      // Set up polling for questions
-      const questionsInterval = setInterval(fetchQuestions, 3000);
-      
-      // Set up timer only if class is not in the past
-      if (!isPast) {
-        const timerInterval = setInterval(updateTimer, 1000);
-        return () => {
-          clearInterval(questionsInterval);
-          clearInterval(timerInterval);
-        };
+    if (!classData) return;
+
+    let isMounted = true;
+
+    const safeSetState = (fn) => { if (isMounted) fn(); };
+
+    const fetchQuestions = async () => {
+      try {
+        const response = await api.get(`/questions/class/${classData.classId}`);
+        const data = response.data;
+        safeSetState(() => {
+          setQuestions(data?.questions || []);
+          if (data?.isPast) setIsPast(true);
+          if (data?.analytics) {
+            setClassData(prev => ({ ...prev, analytics: data.analytics }));
+          }
+        });
+      } catch (err) {
+        console.error('Failed to fetch questions', err);
       }
-    }
-  }, [classData, fetchQuestions, updateTimer, isPast]);
+    };
+
+    const updateTimer = () => {
+      const now = new Date();
+      const endTime = new Date(classData.endTime);
+      const timeDiff = endTime - now;
+
+      if (timeDiff <= 0) {
+        safeSetState(() => {
+          setTimeLeft('Class has ended');
+          setIsPast(true);
+        });
+        return;
+      }
+
+      const minutes = Math.floor(timeDiff / (1000 * 60));
+      const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+      safeSetState(() => {
+        setTimeLeft(`${minutes}m ${seconds}s remaining`);
+      });
+    };
+
+    // Initial calls
+    fetchQuestions();
+    updateTimer();
+
+    // Set up polling
+    const questionsInterval = setInterval(fetchQuestions, 3000);
+    const timerInterval = setInterval(updateTimer, 1000);
+
+    // Cleanup
+    return () => {
+      isMounted = false;
+      clearInterval(questionsInterval);
+      clearInterval(timerInterval);
+    };
+  }, [classData]);
 
   const handleSubmitQuestion = async (e) => {
     e.preventDefault();
-    
-    if (!newQuestion.trim()) {
-      setError('Please enter a question');
-      return;
-    }
-    
-    if (newQuestion.length > 500) {
-      setError('Question is too long (max 500 characters)');
-      return;
-    }
+
+    const newQ = {
+      _id: Date.now().toString(), // temporary ID
+      text: newQuestion.trim(),
+      author: studentName.trim() || 'Anonymous Student',
+      status: 'unanswered',
+      createdAt: new Date().toISOString(),
+      __optimistic: true
+    };
+
+    setQuestions(prev => [newQ, ...prev]);
+    setNewQuestion('');
+    setStudentName('');
 
     try {
-      await api.post('/questions/post', {
-        text: newQuestion.trim(),
+      const response = await api.post('/questions/post', {
+        text: newQ.text,
         classId: classData.classId,
-        author: studentName.trim() || 'Anonymous Student'
+        author: newQ.author
       });
-      
-      setNewQuestion('');
-      setStudentName(''); // Clear the name field
-      setSuccess('Question posted successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-      fetchQuestions();
+
+      setQuestions(prev =>
+        prev.map(q =>
+          q._id === newQ._id ? { ...response.data, __optimistic: false } : q
+        )
+      );
     } catch (error) {
-      setError(error.response?.data?.message || 'Failed to post question');
+      setQuestions(prev => prev.filter(q => q._id !== newQ._id));
+      setError('Failed to post question');
     }
   };
 
@@ -162,7 +169,7 @@ const StudentDashboard = () => {
           ) : (
             <p>Analytics for this class are not available.</p>
           )}
-          <div className="error-message" style={{marginTop: '1rem'}}>
+          <div className="error-message" style={{ marginTop: '1rem' }}>
             This class session has ended. You can no longer post questions.
           </div>
         </div>
@@ -181,7 +188,7 @@ const StudentDashboard = () => {
                 maxLength={50}
               />
             </div>
-            
+
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="question">Your Question</label>
@@ -197,7 +204,7 @@ const StudentDashboard = () => {
                   maxLength={500}
                   required
                 />
-                <small style={{color: '#666'}}>
+                <small style={{ color: '#666' }}>
                   {newQuestion.length}/500 characters
                 </small>
               </div>
@@ -213,7 +220,7 @@ const StudentDashboard = () => {
         <div className="board-header">
           <h3>All Questions ({questions.length})</h3>
         </div>
-        
+
         <div className="sticky-notes-container">
           {questions.length === 0 ? (
             <div className="empty-state">
@@ -235,4 +242,4 @@ const StudentDashboard = () => {
   );
 };
 
-export default StudentDashboard;
+export default StudentDashboard;   
