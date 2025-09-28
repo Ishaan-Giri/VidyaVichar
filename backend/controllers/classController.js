@@ -56,7 +56,8 @@ const joinClass = async (req, res) => {
 
     // Check if class is still active
     const currentTime = new Date();
-    if (currentTime > classRoom.endTime) {
+    const endTime = new Date(classRoom.startTime.getTime() + classRoom.duration*60000);
+    if (currentTime > endTime) {
       return res.status(400).json({ message: 'Class session has ended' });
     }
 
@@ -64,7 +65,7 @@ const joinClass = async (req, res) => {
       classId: classRoom._id,
       subjectName: classRoom.subjectName,
       instructorName: classRoom.instructorName,
-      endTime: classRoom.endTime
+      endTime: endTime
     });
   } catch (error) {
     res.status(500).json({ message: 'Error joining class', error: error.message });
