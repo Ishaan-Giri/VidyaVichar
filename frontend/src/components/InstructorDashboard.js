@@ -3,14 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 import CreateClass from './CreateClass';
-import StickyNote from './StickyNote';
-import QuestionFilter from './QuestionFilter';
 
 const InstructorDashboard = () => {
   const [classes, setClasses] = useState([]);
-  const [activeClass, setActiveClass] = useState(null);
-  const [questions, setQuestions] = useState([]);
-  const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
@@ -20,35 +15,16 @@ const InstructorDashboard = () => {
   const fetchClasses = useCallback(async () => {
     try {
       const response = await api.get('/classes/my-classes');
-      // Ensure response.data is an array
       const classesData = Array.isArray(response.data) ? response.data : [];
       setClasses(classesData);
     } catch (error) {
       console.error('Failed to fetch classes:', error);
       setError('Failed to fetch classes');
-      setClasses([]); // Set empty array on error
+      setClasses([]);
     } finally {
       setLoading(false);
     }
   }, []);
-
-  const fetchQuestions = useCallback(async () => {
-    if (!activeClass || !activeClass._id) return;
-    
-    try {
-      const response = await api.get(`/questions/class/${activeClass._id}?status=${filter}`);
-      // Ensure response.data is an array and filter out any undefined/null values
-      const questionsData = Array.isArray(response.data) 
-        ? response.data.filter(q => q && q._id) 
-        : [];
-      
-      console.log('Fetched questions:', questionsData); // Debug log
-      setQuestions(questionsData);
-    } catch (error) {
-      console.error('Failed to fetch questions:', error);
-      setQuestions([]); // Set empty array on error
-    }
-  }, [activeClass, filter]);
 
   useEffect(() => {
     if (!user) {
@@ -58,52 +34,14 @@ const InstructorDashboard = () => {
     fetchClasses();
   }, [user, navigate, fetchClasses]);
 
-  useEffect(() => {
-    if (activeClass) {
-      fetchQuestions();
-      // Set up polling for real-time updates
-      const interval = setInterval(fetchQuestions, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [activeClass, filter, fetchQuestions]);
-
   const handleClassCreated = (newClass) => {
     if (newClass && newClass._id) {
       setClasses(prevClasses => [newClass, ...prevClasses]);
     }
   };
 
-  const handleJoinClass = (classData) => {
-    if (classData && classData._id) {
-      setActiveClass(classData);
-      setFilter('all');
-    }
-  };
-
-  const handleQuestionStatusChange = async (questionId, newStatus) => {
-    if (!questionId || !newStatus) return;
-    
-    try {
-      await api.patch(`/questions/${questionId}/status`, { status: newStatus });
-      fetchQuestions(); // Refresh questions
-    } catch (error) {
-      console.error('Failed to update question status:', error);
-      setError('Failed to update question status');
-    }
-  };
-
-  const handleClearBoard = async () => {
-    if (!activeClass || !activeClass._id) return;
-    
-    if (window.confirm('Are you sure you want to clear all questions?')) {
-      try {
-        await api.delete(`/questions/class/${activeClass._id}/clear`);
-        setQuestions([]);
-      } catch (error) {
-        console.error('Failed to clear questions:', error);
-        setError('Failed to clear questions');
-      }
-    }
+  const handleViewClass = (classId) => {
+    navigate(`/class/${classId}`);
   };
 
   const handleLogout = () => {
@@ -141,7 +79,6 @@ const InstructorDashboard = () => {
         ) : (
           <div className="classes-grid">
             {classes.map((classData) => {
-              // Add safety check for classData
               if (!classData || !classData._id) return null;
               
               return (
@@ -152,7 +89,7 @@ const InstructorDashboard = () => {
                   <p><strong>Duration:</strong> {classData.duration || 0} minutes</p>
                   <p><strong>Status:</strong> {new Date() > new Date(classData.endTime) ? 'Ended' : 'Active'}</p>
                   <button 
-                    onClick={() => handleJoinClass(classData)}
+                    onClick={() => handleViewClass(classData._id)}
                     className="btn btn-primary"
                     style={{marginTop: '1rem'}}
                   >
@@ -164,50 +101,6 @@ const InstructorDashboard = () => {
           </div>
         )}
       </div>
-
-      {activeClass && (
-        <div className="questions-board">
-          <div className="board-header">
-            <div>
-              <h3>Questions for {activeClass.subjectName || 'Unknown Subject'}</h3>
-              <p>Access Code: <span className="access-code">{activeClass.accessCode || 'N/A'}</span></p>
-            </div>
-            <div style={{display: 'flex', gap: '1rem', alignItems: 'center'}}>
-              <QuestionFilter filter={filter} onFilterChange={setFilter} />
-              <button onClick={handleClearBoard} className="btn btn-danger">
-                Clear Board
-              </button>
-            </div>
-          </div>
-
-          <div className="sticky-notes-container">
-            {questions.length === 0 ? (
-              <div className="empty-state">
-                <h3>No questions yet</h3>
-                <p>Questions will appear here when students post them.</p>
-              </div>
-            ) : (
-        questions.map((question, index) => {
-  console.log(`Question ${index}:`, question); // Debug log
-  
-  if (!question) {
-    console.error(`Question at index ${index} is undefined`);
-    return null;
-  }
-  
-  return (
-    <StickyNote
-      key={question._id || `question-${index}`}
-      question={question}
-      isInstructor={true}
-      onStatusChange={handleQuestionStatusChange}
-    />
-  );
-})
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -5,6 +5,7 @@ import Login from './components/Login';
 import Signup from './components/Signup';
 import InstructorDashboard from './components/InstructorDashboard';
 import StudentDashboard from './components/StudentDashboard';
+import ClassView from './components/ClassView';
 import './App.css';
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
               <Route path="/signup" element={<Signup />} />
               <Route path="/instructor-dashboard" element={<InstructorDashboard />} />
               <Route path="/student-dashboard" element={<StudentDashboard />} />
+              <Route path="/class/:classId" element={<ClassView />} />
             </Routes>
           </main>
         </div>
